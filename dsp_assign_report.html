@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSP 领取汇总 · DSP Pickup Report</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#111827; --ink2:#374151; --muted:#6b7280; --faint:#9ca3af;
+    --line:#e5e7eb; --line2:#f1f3f6;
+    --panel:#ffffff; --page:#f4f5f7;
+    --brand:#0f5f73; --brand-2:#0b4a5a; --brand-soft:#e6f1f4;
+    --claim:#14866d; --unclaim:#e0663a; --abn:#7c3aed;
+    --sel:#dbeafe; --sel-b:#2563eb; --head:#f8f9fb;
+    --focus:#2563eb;
+    --r-bad-bg:#fde8e8;  --r-bad-fg:#b42318;
+    --r-ok-bg:#e8f6ec;   --r-ok-fg:#2f7a40;
+    --r-good-bg:#bfe6c9; --r-good-fg:#14532d;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); background:var(--page); font-size:14px; line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+  .en{color:var(--muted); font-weight:500}
+
+  /* ---------- top bar ---------- */
+  .topbar{background:linear-gradient(120deg,var(--brand-2),var(--brand)); color:#fff}
+  .topbar .in{width:100%; margin:0 auto; padding:18px clamp(12px,2.2vw,32px); display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+  .mark{width:38px; height:38px; border-radius:10px; background:rgba(255,255,255,.16); display:grid; place-items:center; font-weight:750; font-size:13px; letter-spacing:.5px}
+  .topbar h1{margin:0; font-size:18px; font-weight:680; letter-spacing:.2px}
+  .topbar h1 .en{color:rgba(255,255,255,.72); font-weight:500; font-size:14px; margin-left:6px}
+  .topbar .sub{font-size:12.5px; color:rgba(255,255,255,.72)}
+  .topbar .grow{flex:1}
+  .filechip{display:none; align-items:center; gap:10px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22);
+    padding:6px 8px 6px 12px; border-radius:999px; font-size:12.5px}
+  .filechip.on{display:flex}
+  .filechip button{font:inherit; font-size:12px; border:none; background:#fff; color:var(--brand-2); border-radius:999px; padding:4px 10px; cursor:pointer; font-weight:600}
+
+  .wrap{width:100%; margin:0 auto; padding:22px clamp(12px,2.2vw,32px) 70px}
+  .card{min-width:0}
+
+  /* ---------- cards / headings ---------- */
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow)}
+  .card-h{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid var(--line2)}
+  .card-h h2{margin:0; font-size:15px; font-weight:660}
+  .card-h h2 .en{font-size:12.5px; margin-left:6px}
+  .card-b{padding:16px 18px}
+  .grow{flex:1}
+  section{margin-top:18px}
+
+  /* ---------- upload ---------- */
+  #drop{
+    border:1.5px dashed #c9d2dc; border-radius:var(--radius); background:var(--panel);
+    padding:34px 18px; text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+  }
+  #drop:hover,#drop.hot{border-color:var(--brand); background:var(--brand-soft)}
+  #drop .ico{width:44px; height:44px; margin:0 auto 10px; border-radius:12px; background:var(--brand-soft); color:var(--brand); display:grid; place-items:center; font-size:22px}
+  #drop .big{font-size:15.5px; font-weight:640}
+  #drop .hint{color:var(--muted); font-size:12.5px; margin-top:6px}
+  #drop .cols{color:var(--muted); font-size:12px; margin-top:12px}
+  #drop code{background:var(--line2); color:var(--ink2); padding:2px 7px; border-radius:5px; margin:0 2px; white-space:nowrap; font-family:inherit}
+  #uploadBox.done{display:none}
+  .row-opts{display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-top:12px; color:var(--muted); font-size:13px}
+  .row-opts label{display:flex; align-items:center; gap:7px; cursor:pointer; color:var(--ink2)}
+  #status{margin-top:10px; font-size:13px}
+  #status.err{color:#b42318; background:#fef3f2; border:1px solid #fecdca; padding:9px 12px; border-radius:8px}
+  #status.ok{color:var(--claim)}
+
+  /* ---------- KPIs ---------- */
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px}
+  .kpi{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .kpi::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--line)}
+  .kpi.k-vol::before{background:var(--brand)}
+  .kpi.k-cl::before{background:var(--claim)}
+  .kpi.k-un::before{background:var(--unclaim)}
+  .kpi.k-rate::before{background:var(--claim)}
+  .kpi.k-abn::before,.kpi.k-abnp::before{background:var(--abn)}
+  .kpi .l{font-size:12.5px; color:var(--ink2); font-weight:600}
+  .kpi .l .en{display:block; font-size:11px; font-weight:500; margin-top:1px}
+  .kpi .n{font-size:24px; font-weight:720; font-variant-numeric:tabular-nums; letter-spacing:.2px; margin-top:8px}
+  .kpi.k-rate .n{color:var(--claim)}
+  .kpi.k-rate.bad .n{color:var(--r-bad-fg)}
+  .kpi.k-abn .n,.kpi.k-abnp .n{color:var(--abn)}
+  @media(max-width:420px){ .kpis{grid-template-columns:repeat(2,1fr)} }
+
+  /* ---------- bars ---------- */
+  .legend{display:flex; gap:14px; font-size:12px; color:var(--muted); flex-wrap:wrap; align-items:center}
+  .legend i{display:inline-block; width:10px; height:10px; border-radius:3px; vertical-align:-1px; margin-right:5px}
+  .bars{display:flex; flex-direction:column; gap:4px}
+  .barrow{display:grid; grid-template-columns:84px 1fr 120px 74px; align-items:center; gap:12px; padding:5px 8px; margin:0 -8px; border-radius:8px; cursor:pointer}
+  .barrow:hover{background:var(--line2)}
+  .barrow .dsp{font-size:12.5px; font-weight:650; font-variant-numeric:tabular-nums}
+  .track{height:14px; background:var(--line2); border-radius:4px; overflow:hidden; display:flex}
+  .track .c{background:var(--claim); height:100%}
+  .track .u{background:var(--unclaim); height:100%}
+  .barrow .meta{font-size:12px; color:var(--muted); text-align:right; font-variant-numeric:tabular-nums}
+  .barrow .meta b{color:var(--ink); font-weight:650}
+  .pill{font-size:11.5px; font-weight:650; text-align:center; padding:2px 0; border-radius:999px; font-variant-numeric:tabular-nums}
+  .pill.r-bad{background:var(--r-bad-bg); color:var(--r-bad-fg)}
+  .pill.r-ok{background:var(--r-ok-bg); color:var(--r-ok-fg)}
+  .pill.r-good{background:var(--r-good-bg); color:var(--r-good-fg)}
+  @media(max-width:640px){ .barrow{grid-template-columns:70px 1fr 64px} .barrow .meta{display:none} }
+
+  /* ---------- buttons ---------- */
+  button.btn{
+    font:inherit; font-size:12.5px; border:1px solid var(--line); background:var(--panel);
+    color:var(--ink2); padding:6px 12px; border-radius:8px; cursor:pointer; transition:background .12s,border-color .12s; white-space:nowrap; font-weight:550
+  }
+  button.btn:hover{background:var(--head); border-color:#cfd5dd}
+  button.btn.primary{background:var(--brand); color:#fff; border-color:var(--brand)}
+  button.btn.primary:hover{background:var(--brand-2)}
+  button.btn .en{color:inherit; opacity:.75; margin-left:3px}
+
+  /* ---------- result grid ---------- */
+  .gridwrap{overflow-x:auto; width:100%}
+  table.grid{border-collapse:collapse; width:100%; min-width:900px; font-size:13.5px}
+  table.grid th:not(.cmth):not(.rmkh), table.grid td.cell:not(.cmt):not(.rmk){width:1%}
+  table.grid th, table.grid td{border-bottom:1px solid var(--line); border-right:1px solid var(--line2); padding:0}
+  table.grid thead th{background:var(--head); font-weight:640; color:var(--ink); position:sticky; top:0; z-index:2; user-select:none; vertical-align:bottom; border-bottom:1px solid var(--line)}
+  .thcell{display:flex; align-items:flex-end; gap:6px; padding:9px 10px; cursor:pointer}
+  .thcell .htxt{display:flex; flex-direction:column; line-height:1.25; white-space:nowrap}
+  .thcell .htxt>span:first-child{font-size:13px; font-weight:650; color:var(--ink)}
+  .thcell .htxt .en{font-size:10.5px; font-weight:600; letter-spacing:.35px; text-transform:uppercase; color:var(--faint); margin-top:2px}
+  .thcell .cp{margin-left:auto; opacity:.4; border:none; background:none; cursor:pointer; font-size:13px; padding:2px 4px; border-radius:4px; color:var(--muted)}
+  .thcell .cp:hover{opacity:1; background:#e5e9ef}
+  th.corner{width:40px; cursor:pointer; color:var(--faint)}
+  td.gut{width:40px; background:var(--head); color:var(--faint); text-align:center; font-variant-numeric:tabular-nums; user-select:none; cursor:pointer; font-size:11.5px}
+  table.grid td.cell{padding:10px 12px; white-space:nowrap; outline:none; color:var(--ink2)}
+  table.grid td.num{text-align:center; font-variant-numeric:tabular-nums; font-weight:700; font-size:14px; color:var(--ink); letter-spacing:.2px}
+  table.grid th.numh .thcell{justify-content:center}
+  table.grid th.numh .htxt{align-items:center; text-align:center}
+  table.grid th.numh .cp{margin-left:0}
+  table.grid td.dspc{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; font-weight:650; color:var(--ink); letter-spacing:.3px}
+  table.grid td.cmt{white-space:normal; min-width:260px; width:auto; font-size:12.5px; color:var(--ink2); line-height:1.55}
+  .cchip{display:inline-flex; align-items:center; gap:6px; margin:2px 5px 2px 0; padding:2px 3px 2px 8px; border-radius:6px; font-size:11.5px; font-weight:600}
+  .cchip b{background:rgba(255,255,255,.75); padding:0 6px; border-radius:4px; font-variant-numeric:tabular-nums; font-weight:700}
+  tr.total td.cell{background:#eef1f5; color:var(--ink); font-weight:750; border-top:2px solid #c9d0d9}
+  tr.total td.dspc{font-family:inherit; font-size:13.5px; letter-spacing:.4px}
+  tr.total td.gut{background:#eef1f5; color:var(--ink2); font-weight:700; border-top:2px solid #c9d0d9}
+  table.grid td.rmk{white-space:normal; min-width:140px; width:22%}
+  table.grid tbody tr:hover td.cell:not(.sel):not(.r-bad):not(.r-ok):not(.r-good){background:#fafbfc}
+  td.cell.r-bad {background:var(--r-bad-bg) !important;  color:var(--r-bad-fg) !important;  font-weight:700}
+  td.cell.r-ok  {background:var(--r-ok-bg) !important;   color:var(--r-ok-fg) !important;   font-weight:650}
+  td.cell.r-good{background:var(--r-good-bg) !important; color:var(--r-good-fg) !important; font-weight:700}
+  td.cell.sel{background:var(--sel) !important}
+  td.cell.anchor{box-shadow:inset 0 0 0 2px var(--sel-b)}
+  td.cell[contenteditable="true"]{
+    background:#fff !important; color:var(--ink); box-shadow:inset 0 0 0 2px var(--focus);
+    cursor:text; user-select:text; -webkit-user-select:text; caret-color:var(--focus);
+  }
+  .foot{color:var(--muted); font-size:12px; padding:12px 18px; border-top:1px solid var(--line2); line-height:1.6}
+  .foot .en{display:block; color:var(--faint)}
+
+  /* ---------- problem parcels ---------- */
+  .pp{display:grid; grid-template-columns:minmax(180px,240px) minmax(0,1fr); min-height:360px}
+  .pp-side{border-right:1px solid var(--line2); padding:10px; display:flex; flex-direction:column; gap:3px; max-height:620px; overflow:auto}
+  .dspbtn{display:flex; align-items:center; gap:8px; width:100%; text-align:left; font:inherit; font-size:13px; border:1px solid transparent; background:none; padding:8px 10px; border-radius:8px; cursor:pointer; color:var(--ink2)}
+  .dspbtn:hover{background:var(--line2)}
+  .dspbtn.on{background:var(--brand-soft); border-color:#bcd9e1; color:var(--brand-2); font-weight:650}
+  .dspbtn .cnt{margin-left:auto; font-size:11.5px; font-variant-numeric:tabular-nums; background:var(--line2); color:var(--ink2); padding:1px 8px; border-radius:999px; font-weight:600}
+  .dspbtn.on .cnt{background:var(--brand); color:#fff}
+  .dspbtn .zero{color:var(--faint)}
+  .pp-main{padding:14px 16px; min-width:0}
+  .pp-tools{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px}
+  .search{flex:1; min-width:200px; font:inherit; font-size:13px; border:1px solid var(--line); border-radius:8px; padding:7px 11px; outline:none}
+  .search:focus{border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft)}
+  .cats{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px}
+  .cat{font:inherit; font-size:12px; border:1px solid var(--line); background:#fff; color:var(--ink2); padding:4px 10px; border-radius:999px; cursor:pointer}
+  .cat:hover{border-color:#cfd5dd}
+  .cat.on{background:var(--ink); color:#fff; border-color:var(--ink)}
+  .cat b{font-variant-numeric:tabular-nums; margin-left:4px}
+  .tag{display:inline-block; font-size:11.5px; padding:2px 8px; border-radius:999px; font-weight:600; white-space:nowrap}
+  .tag.abn{background:#f1e9ff; color:#6d28d9}
+  .tag.missort{background:#fff1e6; color:#b5470b}
+  .tag.on{background:#e8f1ff; color:#1d4ed8}
+  .tag.off{background:#e6f6f3; color:#0f766e}
+  .tag.notrecv{background:#fde8e8; color:#b42318}
+  .tag.hub{background:#fef6dc; color:#92600a}
+  .tag.other{background:#eef0f3; color:#4b5563}
+  table.plist{border-collapse:collapse; width:100%; font-size:13px}
+  table.plist th{text-align:left; font-weight:640; color:var(--ink2); background:var(--head); padding:8px 10px; border-bottom:1px solid var(--line); position:sticky; top:0; white-space:nowrap}
+  table.plist th .en{display:block; font-size:11px}
+  table.plist td{padding:7px 10px; border-bottom:1px solid var(--line2); white-space:nowrap}
+  table.plist tbody tr:hover td{background:#fafbfc}
+  table.plist td.idx{color:var(--faint); font-variant-numeric:tabular-nums; width:40px}
+  .wbn{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; cursor:pointer; border-bottom:1px dashed #c3cad3}
+  .wbn:hover{color:var(--brand)}
+  .wbn.copied{color:var(--claim); border-bottom-color:var(--claim)}
+  .plistwrap{max-height:max(360px,62vh); overflow:auto; border:1px solid var(--line); border-radius:9px}
+  .empty{color:var(--muted); text-align:center; padding:40px 10px; font-size:13px}
+  .empty .en{display:block; color:var(--faint)}
+  .pcount{font-size:12px; color:var(--muted); margin-top:8px}
+  @media(max-width:760px){ .pp{grid-template-columns:1fr} .pp-side{flex-direction:row; flex-wrap:wrap; border-right:none; border-bottom:1px solid var(--line2); max-height:none} .dspbtn{width:auto} }
+
+  .toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); background:var(--ink); color:#fff; padding:8px 14px; border-radius:8px; font-size:12.5px; opacity:0; transition:all .2s; pointer-events:none; z-index:50}
+  .toast.on{opacity:1; transform:translateX(-50%) translateY(0)}
+  .hide{display:none !important}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="in">
+    <div class="mark">FLL</div>
+    <div>
+      <h1>DSP 领取汇总<span class="en">DSP Pickup Report</span></h1>
+      <div class="sub">上传导出文件即分析，无需连库 · Upload an export to analyze — no database needed</div>
+    </div>
+    <span class="grow"></span>
+    <div class="filechip" id="fileChip">
+      <span id="fileName"></span>
+      <button id="btnReupload">重新上传 Re-upload</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="uploadBox">
+    <div id="drop">
+      <div class="ico">⇪</div>
+      <div class="big">拖入文件，或点击选择 <span class="en">· Drop a file or click to browse</span></div>
+      <div class="hint">支持 .xlsx / .xls / .csv（assigntaskdetailexport 导出） · Supports .xlsx / .xls / .csv</div>
+      <div class="cols">需要包含列 Required columns：<code>派送方 / Station</code><code>运单号 / Waybill No.</code><code>运单状态 / Waybill status</code><code>领取状态 / Received Status</code> · 中文或英文导出都可以 Chinese or English export</div>
+    </div>
+  </div>
+  <input type="file" id="file" accept=".xlsx,.xls,.csv" class="hide">
+  <div class="row-opts">
+    <label><input type="checkbox" id="optOthers"> 同时显示配置外的派送方 <span class="en">Show DSPs outside the list</span></label>
+  </div>
+  <div id="status"></div>
+
+  <div id="result" class="hide">
+    <!-- KPIs -->
+    <section class="kpis">
+      <div class="kpi k-vol"><div class="l">总数量<span class="en">Volume</span></div><div class="n" id="kTotal">0</div></div>
+      <div class="kpi k-cl"><div class="l">实领数量<span class="en">Claimed Volume</span></div><div class="n" id="kClaim">0</div></div>
+      <div class="kpi k-un"><div class="l">未领数量<span class="en">Unclaimed Volume</span></div><div class="n" id="kUn">0</div></div>
+      <div class="kpi k-rate" id="kRateBox"><div class="l">整体取件率<span class="en">Overall Pickup Rate</span></div><div class="n" id="kRate">—</div></div>
+      <div class="kpi k-abn"><div class="l">异常取件数<span class="en">Abnormal Pickup Count</span></div><div class="n" id="kAbn">0</div></div>
+      <div class="kpi k-abnp"><div class="l">异常领取（%）<span class="en">Abnormal Pickup (%)</span></div><div class="n" id="kAbnP">—</div></div>
+    </section>
+
+    <!-- bars -->
+    <section class="card">
+      <div class="card-h">
+        <h2>各 DSP 领取情况<span class="en">Pickup by DSP</span></h2>
+        <span class="grow"></span>
+        <div class="legend">
+          <span><i style="background:var(--claim)"></i>实领 Claimed</span>
+          <span><i style="background:var(--unclaim)"></i>未领 Unclaimed</span>
+          <span>点击查看明细 · Click for Comment Detail</span>
+        </div>
+      </div>
+      <div class="card-b"><div class="bars" id="bars"></div></div>
+    </section>
+
+    <!-- result table -->
+    <section class="card">
+      <div class="card-h">
+        <h2>结果表<span class="en">Summary Table</span></h2>
+        <span class="grow"></span>
+        <div class="legend">
+          <span><i style="background:var(--r-bad-bg);border:1px solid var(--r-bad-fg)"></i>&lt;98%</span>
+          <span><i style="background:var(--r-ok-bg);border:1px solid var(--r-ok-fg)"></i>≥98%</span>
+          <span><i style="background:var(--r-good-bg);border:1px solid var(--r-good-fg)"></i>≥99%</span>
+        </div>
+        <button class="btn" id="btnCopyTable">复制整表<span class="en">Copy table</span></button>
+        <button class="btn primary" id="btnCsv">导出 CSV<span class="en">Export</span></button>
+      </div>
+      <div class="gridwrap"><table class="grid" id="grid"></table></div>
+      <div class="foot">
+        单击选中，拖动框选，点表头选整列、点序号选整行，左上角全选；Ctrl/⌘+C 复制（可直接粘进 Excel）；Ctrl/⌘+V 粘贴到选中格，一个值会填满所有选中格；Delete 清空；Ctrl/⌘+Z 撤销；双击或按 Enter 编辑。
+        <span class="en">Click to select, drag for a range, click a header for a column or a row number for a row. Ctrl/⌘+C copies (Excel-ready); Ctrl/⌘+V pastes into the selection — one value fills every selected cell; Delete clears; Ctrl/⌘+Z undoes; double-click or Enter to edit.</span>
+      </div>
+    </section>
+
+    <!-- problem parcels -->
+    <section class="card" id="ppCard">
+      <div class="card-h">
+        <h2>Comment Detail<span class="en">各 DSP 未领包裹明细</span></h2>
+        <span class="grow"></span>
+        <span class="legend">按 DSP 和类型查看未领包裹 · Unclaimed parcels by DSP and type</span>
+      </div>
+      <div class="pp">
+        <div class="pp-side" id="ppSide"></div>
+        <div class="pp-main">
+          <div class="pp-tools">
+            <input class="search" id="ppSearch" placeholder="搜索运单号 / 状态 · Search tracking # or status">
+            <button class="btn" id="btnCopyWb">复制运单号<span class="en">Copy tracking #</span></button>
+            <button class="btn primary" id="btnPpCsv">导出明细<span class="en">Export details</span></button>
+          </div>
+          <div class="cats" id="ppCats"></div>
+          <div class="plistwrap"><table class="plist" id="ppTable"></table></div>
+          <div class="pcount" id="ppCount"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ===== 配置（与 SQL 一致）=====
+const DSP_LIST = ['FLL-CGS','FLL-ELD','FLL-OTD','FLL-GLP','FLL-ECL','FLL-JET','FLL-SDI','FLL-WME','FLL-SOX','FLL-VJS','FLL-YMS','FLL-ULG','FLL-SLP','FLL-GOD','FLL-ORC','FLL-DRT'];
+const CLAIMED_STATUSES = new Set(['签收','派送异常','快递员收件']);
+const NOT_RECEIVED = new Set(['转运中心签出','转运中心签入','退回转运中心','退回站点']);
+
+// 问题类型（中 / 英）
+const CATS = {
+  abn:     ['异常取件','Abnormal pickup'],
+  missort: ['DSP错分','DSP missort'],
+  on:      ['上架','Delist shelve'],
+  off:     ['外城下架','Off-shelf (out of town)'],
+  notrecv: ['未拿到','Not receive'],
+  hub:     ['HUB滞留','Stay at Hub'],
+  other:   ['其他','Other'],
+};
+const CMT_ORDER = ['missort','on','off','notrecv','hub'];
+
+// 状态英文对照（仅用于显示）
+const STATUS_EN = {
+  '签收':'Sign','派送异常':'Delivery failed','快递员收件':'Out for delivery',
+  '站点签入':'Station sign in','站点签出':'Station sign out','集包':'Packet','上架':'Delist','下架':'Off shelf',
+  '转运中心签出':'Sorting Center Sign out','转运中心签入':'Sorting Center Sign in',
+  '退回转运中心':'Return to sorting center','退回站点':'Return to station',
+  '已领':'Claimed','未领':'Unclaimed'
+};
+
+// ===== 中英文导出统一：列名、状态值都转成中文再计算 =====
+const normKey = v => String(v??'').replace(/[\uFEFF\u200B-\u200D\u00A0]/g,'').toLowerCase().replace(/[\s.\-_:：()（）#]/g,'');
+const COL_ALIASES = {
+  '派送方':  ['派送方','station','dsp'],
+  '运单号':  ['运单号','waybillno','waybillnumber','trackingno','trackingnumber'],
+  '运单状态':['运单状态','waybillstatus'],
+  '领取状态':['领取状态','receivedstatus','receivestatus','claimstatus','claimedstatus'],
+};
+const VAL_ALIASES = {
+  // 运单状态（英文系统用词 → 中文）
+  'sign':'签收','deliveryfailed':'派送异常','outfordelivery':'快递员收件',
+  'stationsignin':'站点签入','stationsignout':'站点签出','packet':'集包','delist':'上架',
+  'sortingcentersignout':'转运中心签出','sortingcentersignin':'转运中心签入',
+  'returntosortingcenter':'退回转运中心','returnedtosortingcenter':'退回转运中心',
+  'returntostation':'退回站点','returnedtostation':'退回站点',
+  // 领取状态
+  'claimed':'已领','unclaimed':'未领',
+};
+const toZh = v => { const t=String(v??'').trim(); return VAL_ALIASES[normKey(t)] || t; };
+const colIndex = (row,k) => row.findIndex(x=>COL_ALIASES[k].includes(normKey(x)));
+const bi = s => s ? (STATUS_EN[s] ? `${s} · ${STATUS_EN[s]}` : s) : '—';
+
+// 结果表表头：[中文, English]
+const HEADERS = [
+  ['派送方',       'DSP'],
+  ['实际取件率',   'Pickup Rate'],
+  ['总数量',       'Volume'],
+  ['实领数量',     'Claimed Volume'],
+  ['未领数量',     'unclaimed Volume'],
+  ['异常取件数',   'Abnormal Pickup Count'],
+  ['异常领取（%）','Abnormal Pickup (%)'],
+  ['',            'Comment'],
+  ['',            'Remark'],
+];
+const headerText = h => (h[0] ? h[0]+' '+h[1] : h[1]);
+const C = {DSP:0, RATE:1, VOL:2, CLAIM:3, UNCLAIM:4, ABN:5, ABNP:6, CMT:7, RMK:8};
+const NUMCOLS = new Set([C.RATE, C.VOL, C.CLAIM, C.UNCLAIM, C.ABN, C.ABNP]);
+const REQUIRED = ['派送方','运单号','运单状态','领取状态'];
+
+// ===== DOM =====
+const $ = id => document.getElementById(id);
+const drop=$('drop'), fileInput=$('file'), statusEl=$('status'), resultEl=$('result');
+
+drop.addEventListener('click', ()=>fileInput.click());
+$('btnReupload').addEventListener('click', ()=>fileInput.click());
+['dragover','dragenter'].forEach(ev=>document.addEventListener(ev, e=>{e.preventDefault(); drop.classList.add('hot');}));
+document.addEventListener('dragleave', e=>{ if(!e.relatedTarget) drop.classList.remove('hot'); });
+document.addEventListener('drop', e=>{
+  e.preventDefault(); drop.classList.remove('hot');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{ if(e.target.files.length) handleFile(e.target.files[0]); e.target.value=''; });
+$('optOthers').addEventListener('change', ()=>{ if(lastRows) analyze(lastRows); });
+
+let lastRows=null, srcHeader=[];
+
+function setStatus(msg, cls){ statusEl.className = cls||''; statusEl.textContent = msg||''; }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('on'),1400); }
+
+// ===== 读取文件 =====
+const cleanH = h => String(h??'').replace(/[﻿​-‍ \s]/g,'').trim();
+
+// 系统导出的 xlsx 常把范围(!ref)写成 A1，只读到一行 → 按实际单元格重算
+function fixRange(ws){
+  let r1=Infinity,c1=Infinity,r2=-1,c2=-1;
+  for(const k in ws){
+    if(k[0]==='!') continue;
+    const a=XLSX.utils.decode_cell(k);
+    if(a.r<r1)r1=a.r; if(a.c<c1)c1=a.c; if(a.r>r2)r2=a.r; if(a.c>c2)c2=a.c;
+  }
+  if(r2>=0) ws['!ref']=XLSX.utils.encode_range({s:{r:r1,c:c1},e:{r:r2,c:c2}});
+}
+
+function decodeText(buf){
+  const u8=new Uint8Array(buf);
+  let t=new TextDecoder('utf-8').decode(u8);
+  if(t.includes('�')){ try{ t=new TextDecoder('gbk').decode(u8); }catch(e){} }
+  return t;
+}
+
+function handleFile(file){
+  const name = file.name.toLowerCase();
+  const reader = new FileReader();
+  reader.onerror = ()=>setStatus('读取文件失败 · Failed to read the file.','err');
+  reader.onload = e=>{
+    const buf = e.target.result;
+    try{
+      if(name.endsWith('.csv')){ parseAndRun([csvToRows(decodeText(buf))], file.name); return; }
+      if(typeof XLSX==='undefined'){
+        setStatus('Excel 解析库没加载成功（可能离线），请另存为 .csv 再上传 · Excel library failed to load (offline?). Save as .csv and try again.','err');
+        return;
+      }
+      let wb;
+      try{ wb = XLSX.read(new Uint8Array(buf), {type:'array'}); }
+      catch(err){ wb = XLSX.read(decodeText(buf), {type:'string'}); }
+      const sheets = wb.SheetNames.map(n=>{
+        const ws = wb.Sheets[n]; fixRange(ws);
+        return XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false, blankrows:false});
+      });
+      parseAndRun(sheets, file.name);
+    }catch(err){ setStatus('文件解析出错 · Parse error: '+err.message,'err'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function csvToRows(text){
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  const rows=[]; let row=[], field='', q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){
+      if(ch==='"'){ if(text[i+1]==='"'){field+='"';i++;} else q=false; }
+      else field+=ch;
+    }else{
+      if(ch==='"') q=true;
+      else if(ch===',') { row.push(field); field=''; }
+      else if(ch==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(ch==='\r'){ }
+      else field+=ch;
+    }
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+function parseAndRun(sheets, fname){
+  let rows=null, hi=-1, header=null, best=null;
+  for(const s of sheets){
+    for(let i=0;i<Math.min(20,s.length);i++){
+      const h=(s[i]||[]).map(x=>String(x??'').trim());
+      const found=REQUIRED.filter(k=>colIndex(h,k)>=0);
+      if(found.length===REQUIRED.length){ rows=s; hi=i; header=h; break; }
+      if(!best || found.length>best.hit) best={hit:found.length,h,found};
+    }
+    if(rows) break;
+  }
+  if(!rows){
+    const total=sheets.reduce((a,s)=>a+s.length,0);
+    setStatus(`没找到表头（共读到 ${total} 行） · Header not found (${total} rows read). 缺少列 Missing: `+
+      REQUIRED.filter(k=>!(best&&best.found.includes(k))).map(k=>`${k} / ${COL_ALIASES[k][1]}`).join('、')+
+      (best? ' ｜ 最接近的一行 Closest row: '+best.h.filter(Boolean).join(' / ') : ''),'err');
+    return;
+  }
+  if(rows.length-hi<2){ setStatus('找到表头，但没有数据行 · Header found but no data rows.','err'); return; }
+  const idx = {};
+  REQUIRED.forEach(k=>{ idx[k]=colIndex(header,k); });
+  srcHeader = header;
+  const objs=[];
+  for(let i=hi+1;i<rows.length;i++){
+    const r=rows[i]; if(!r || !r.length) continue;
+    objs.push({
+      dsp: String(r[idx['派送方']]??'').trim(),
+      wb:  String(r[idx['运单号']]??'').trim(),
+      st:  toZh(r[idx['运单状态']]),
+      cl:  toZh(r[idx['领取状态']]),
+      raw: r,
+    });
+  }
+  lastRows = objs;
+  setStatus(`已读取 ${fname}，共 ${objs.length} 行 · Loaded ${objs.length} rows.`,'ok');
+  $('uploadBox').classList.add('done');
+  $('fileName').textContent = fname;
+  $('fileChip').classList.add('on');
+  analyze(objs);
+}
+
+// ===== 格式化 =====
+const fmtRate = (unclaimed,total) => total ? ((1 - unclaimed/total)*100).toFixed(2)+'%' : '—';
+const fmtAbnP = (abn,total)       => total ? (abn/total*100).toFixed(3)+'%' : '—';
+function rateClass(v){
+  const n = parseFloat(String(v).replace('%',''));
+  if(isNaN(n)) return '';
+  return n>=99 ? 'r-good' : n>=98 ? 'r-ok' : 'r-bad';
+}
+
+// 行 → 问题类型（null = 已领，不是问题件）
+function categorize(o){
+  if(CLAIMED_STATUSES.has(o.st)){
+    if(o.cl==='已领') return null;
+    if(o.cl==='未领') return 'abn';
+    return 'other';
+  }
+  if(o.st==='站点签入') return 'missort';
+  if(o.st==='集包') return 'hub';
+  if(o.st==='上架') return 'on';
+  if(o.st==='下架') return 'off';
+  if(NOT_RECEIVED.has(o.st)) return 'notrecv';
+  return 'other';
+}
+
+// ===== 核心分析（复刻 SQL）=====
+let problems = new Map();   // dsp -> [{wb,st,cl,cat,raw}]
+let ppState = {dsp:null, cat:'all', q:''};
+
+function analyze(objs){
+  const includeOthers = $('optOthers').checked;
+  const map = new Map();
+  const get = d => { if(!map.has(d)) map.set(d,{wb:new Set(),claimed:0,abnormal:0,
+      cnt:{missort:0,on:0,off:0,notrecv:0,hub:0}, other:{}, claimedWb:new Set(), rows:[]}); return map.get(d); };
+
+  for(const o of objs){
+    if(!o.dsp) continue;
+    const g = get(o.dsp);
+    if(o.wb) g.wb.add(o.wb);
+    const cat = categorize(o);
+    if(CLAIMED_STATUSES.has(o.st)){
+      if(o.cl==='已领'){ g.claimed++; if(o.wb) g.claimedWb.add(o.wb); }
+      if(o.cl==='未领') g.abnormal++;
+    }else if(cat in g.cnt){
+      g.cnt[cat]++;
+    }else{
+      const k=o.st||'(空)'; g.other[k]=(g.other[k]||0)+1;
+    }
+    if(cat) g.rows.push({...o, cat});
+  }
+
+  let dsps = DSP_LIST.filter(d=>map.has(d));
+  if(includeOthers){
+    dsps = dsps.concat([...map.keys()].filter(d=>!DSP_LIST.includes(d)).sort());
+  }
+
+  problems = new Map();
+  const data = dsps.map(d=>{
+    const g=map.get(d);
+    const total=g.wb.size, claimed=g.claimed, unclaimed=total-claimed;
+    const parts=[];
+    CMT_ORDER.forEach(k=>{ if(g.cnt[k]>0) parts.push(`${CATS[k][0]} ${CATS[k][1]} ${g.cnt[k]}`); });
+    for(const [k,n] of Object.entries(g.other)) parts.push(`${k}${STATUS_EN[k]?' '+STATUS_EN[k]:''} ${n}`);
+    // 问题件：去重运单号，且排除同一运单另有已领记录的
+    const seen=new Set(), list=[];
+    for(const r of g.rows){
+      const key=r.wb||('#'+list.length);
+      if(r.wb && g.claimedWb.has(r.wb)) continue;
+      if(seen.has(key)) continue;
+      seen.add(key); list.push(r);
+    }
+    problems.set(d, list);
+    return {d,total,claimed,unclaimed,abn:g.abnormal,comment:parts.join(', ')};
+  });
+
+  renderKpis(data);
+  renderBars(data);
+  const gridRows = data.map(x=>[
+    x.d, fmtRate(x.unclaimed,x.total),
+    x.total, x.claimed, x.unclaimed, x.abn,
+    fmtAbnP(x.abn,x.total), x.comment, ''
+  ]);
+  // Total 行：数量求和，比率用同样公式重算，Comment / Remark 留空
+  const T = data.reduce((a,x)=>({t:a.t+x.total, c:a.c+x.claimed, u:a.u+x.unclaimed, a:a.a+x.abn}), {t:0,c:0,u:0,a:0});
+  gridRows.push(['Total', fmtRate(T.u,T.t), T.t, T.c, T.u, T.a, fmtAbnP(T.a,T.t), '', '']);
+  buildGrid(gridRows);
+  resultEl.classList.remove('hide');
+
+  // 默认选中问题件最多的 DSP
+  if(!ppState.dsp || !problems.has(ppState.dsp)){
+    let top=null; for(const [d,l] of problems) if(!top || l.length>problems.get(top).length) top=d;
+    ppState.dsp = top;
+  }
+  ppState.cat='all';
+  renderProblems();
+}
+
+function renderKpis(data){
+  let t=0,c=0,a=0;
+  data.forEach(x=>{ t+=x.total; c+=x.claimed; a+=x.abn; });
+  $('kTotal').textContent=t.toLocaleString();
+  $('kClaim').textContent=c.toLocaleString();
+  $('kUn').textContent=(t-c).toLocaleString();
+  const rate=fmtRate(t-c,t);
+  $('kRate').textContent=rate;
+  $('kRateBox').classList.toggle('bad', rateClass(rate)==='r-bad');
+  $('kAbn').textContent=a.toLocaleString();
+  $('kAbnP').textContent=fmtAbnP(a,t);
+}
+
+function renderBars(data){
+  const maxTotal = Math.max(1, ...data.map(x=>x.total));
+  const el=$('bars'); el.innerHTML='';
+  data.forEach(x=>{
+    const trackW = (x.total/maxTotal*100).toFixed(2);
+    const cW = x.total? (x.claimed/x.total*100).toFixed(2):0;
+    const uW = x.total? (x.unclaimed/x.total*100).toFixed(2):0;
+    const rate = fmtRate(x.unclaimed,x.total);
+    const div=document.createElement('div'); div.className='barrow'; div.title='查看明细 View Comment Detail';
+    div.innerHTML =
+      `<span class="dsp">${esc(x.d)}</span>`+
+      `<div><div class="track" style="width:${trackW}%"><span class="c" style="width:${cW}%"></span><span class="u" style="width:${uW}%"></span></div></div>`+
+      `<span class="meta"><b>${x.claimed.toLocaleString()}</b> / ${x.total.toLocaleString()}</span>`+
+      `<span class="pill ${rateClass(rate)}">${rate}</span>`;
+    div.addEventListener('click', ()=>goProblems(x.d));
+    el.appendChild(div);
+  });
+}
+
+// ===== 问题件 =====
+function goProblems(d){
+  ppState.dsp=d; ppState.cat='all';
+  renderProblems();
+  $('ppCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function filteredProblems(){
+  const list = problems.get(ppState.dsp) || [];
+  const q = ppState.q.trim().toLowerCase();
+  return list.filter(p =>
+    (ppState.cat==='all' || p.cat===ppState.cat) &&
+    (!q || (p.wb+' '+p.st+' '+p.cl+' '+(STATUS_EN[p.st]||'')).toLowerCase().includes(q))
+  );
+}
+
+function renderProblems(){
+  // 左侧 DSP 列表
+  const side=$('ppSide'); side.innerHTML='';
+  for(const [d,l] of problems){
+    const b=document.createElement('button');
+    b.className='dspbtn'+(d===ppState.dsp?' on':'');
+    b.innerHTML=`<span>${esc(d)}</span><span class="cnt${l.length?'':' zero'}">${l.length}</span>`;
+    b.addEventListener('click', ()=>{ ppState.dsp=d; ppState.cat='all'; renderProblems(); });
+    side.appendChild(b);
+  }
+
+  // 类型筛选
+  const list = problems.get(ppState.dsp) || [];
+  const counts={}; list.forEach(p=>counts[p.cat]=(counts[p.cat]||0)+1);
+  const cats=$('ppCats'); cats.innerHTML='';
+  const mk=(key,label,n)=>{
+    const b=document.createElement('button');
+    b.className='cat'+(ppState.cat===key?' on':'');
+    b.innerHTML=`${label}<b>${n}</b>`;
+    b.addEventListener('click', ()=>{ ppState.cat=key; renderProblems(); });
+    cats.appendChild(b);
+  };
+  mk('all','全部 All',list.length);
+  Object.keys(CATS).forEach(k=>{ if(counts[k]) mk(k, `${CATS[k][0]} ${CATS[k][1]}`, counts[k]); });
+
+  // 明细表
+  const rows = filteredProblems();
+  const t=$('ppTable');
+  if(!rows.length){
+    t.innerHTML = `<tbody><tr><td class="empty">${list.length? '没有符合条件的包裹<span class="en">No parcels match</span>' : '这个 DSP 没有未领包裹 🎉<span class="en">No unclaimed parcels for this DSP</span>'}</td></tr></tbody>`;
+  }else{
+    let h=`<thead><tr><th>#</th><th>运单号<span class="en">Tracking No.</span></th><th>问题类型<span class="en">Issue Type</span></th>`+
+          `<th>运单状态<span class="en">Parcel Status</span></th><th>领取状态<span class="en">Claim Status</span></th><th>派送方<span class="en">DSP</span></th></tr></thead><tbody>`;
+    rows.forEach((p,i)=>{
+      h+=`<tr><td class="idx">${i+1}</td>`+
+         `<td><span class="wbn" data-wb="${esc(p.wb)}" title="点击复制 Click to copy">${esc(p.wb||'—')}</span></td>`+
+         `<td><span class="tag ${p.cat}">${CATS[p.cat][0]} ${CATS[p.cat][1]}</span></td>`+
+         `<td>${esc(bi(p.st))}</td><td>${esc(bi(p.cl))}</td><td>${esc(p.dsp)}</td></tr>`;
+    });
+    t.innerHTML=h+'</tbody>';
+  }
+  $('ppCount').textContent = `显示 ${rows.length} / ${list.length} 件 · Showing ${rows.length} of ${list.length} parcels`;
+}
+
+$('ppSearch').addEventListener('input', e=>{ ppState.q=e.target.value; renderProblems(); });
+$('ppTable').addEventListener('click', e=>{
+  const s=e.target.closest('.wbn'); if(!s || !s.dataset.wb) return;
+  copyText(s.dataset.wb); s.classList.add('copied'); setTimeout(()=>s.classList.remove('copied'),900);
+  toast('已复制 Copied: '+s.dataset.wb);
+});
+$('btnCopyWb').addEventListener('click', ()=>{
+  const wbs=filteredProblems().map(p=>p.wb).filter(Boolean);
+  if(!wbs.length){ toast('没有可复制的运单号 Nothing to copy'); return; }
+  copyText(wbs.join('\n')); toast(`已复制 ${wbs.length} 个运单号 · Copied ${wbs.length} tracking #`);
+});
+$('btnPpCsv').addEventListener('click', ()=>{
+  // 导出全部 DSP 的问题件（受类型/搜索筛选影响时只导当前 DSP）
+  const filtered = ppState.cat!=='all' || ppState.q.trim();
+  const src = filtered ? filteredProblems() : [...problems.values()].flat();
+  if(!src.length){ toast('没有可导出的数据 Nothing to export'); return; }
+  const head=['问题类型 Issue Type', ...srcHeader];
+  const lines=[head.map(csvEsc).join(',')];
+  src.forEach(p=>lines.push([`${CATS[p.cat][0]} ${CATS[p.cat][1]}`, ...srcHeader.map((_,i)=>p.raw[i]??'')].map(v=>csvEsc(String(v))).join(',')));
+  download(lines.join('\n'), filtered ? `comment_detail_${ppState.dsp}.csv` : 'comment_detail_all.csv');
+  toast(filtered ? `已导出 ${ppState.dsp} 筛选结果 · Exported filtered rows` : '已导出全部 DSP 明细 · Exported all DSPs');
+});
+
+// ===== 类 Excel 网格 =====
+let grid=[], sel={a:null,f:null}, dragging=false, editing=null, gridBound=false;
+
+function cellClass(ci,v){
+  let cls='cell';
+  if(NUMCOLS.has(ci)) cls+=' num';
+  if(ci===C.DSP) cls+=' dspc';
+  if(ci===C.CMT) cls+=' cmt';
+  if(ci===C.RMK) cls+=' rmk';
+  if(ci===C.RATE){ const rc=rateClass(v); if(rc) cls+=' '+rc; }
+  return cls;
+}
+
+// 单元格显示（复制/导出仍用原始文本）
+function cellHTML(ci,v){
+  if(NUMCOLS.has(ci) && /^\d+$/.test(v)) return Number(v).toLocaleString('en-US');
+  return esc(v);
+}
+function commentChips(v){
+  return v.split(/,\s*/).filter(Boolean).map(part=>{
+    const m=part.match(/^(.*?)\s+(\d+)$/);
+    const label=m?m[1]:part, n=m?m[2]:'';
+    const key=Object.keys(CATS).find(k=>label.startsWith(CATS[k][0])) || 'other';
+    return `<span class="tag ${key} cchip">${esc(label)}${n?`<b>${n}</b>`:''}</span>`;
+  }).join('');
+}
+
+function buildGrid(rows){
+  grid = rows.map(r=>r.map(v=>String(v)));
+  const t=$('grid');
+  let html='<thead><tr><th class="corner" title="全选 Select all">▦</th>';
+  HEADERS.forEach((h,c)=>{
+    const label = h[0] ? `<span>${esc(h[0])}</span><span class="en">${esc(h[1])}</span>` : `<span>${esc(h[1])}</span>`;
+    const thc = NUMCOLS.has(c)?'numh':c===C.CMT?'cmth':c===C.RMK?'rmkh':'';
+    html+=`<th data-c="${c}"${thc?` class="${thc}"`:''}><div class="thcell"><span class="htxt">${label}</span>`+
+          `<button class="cp" data-copycol="${c}" title="复制此列 Copy column">⧉</button></div></th>`;
+  });
+  html+='</tr></thead><tbody>';
+  grid.forEach((r,ri)=>{
+    const isTotal = ri===grid.length-1 && r[C.DSP]==='Total';
+    html+=`<tr${isTotal?' class="total"':''}><td class="gut" data-row="${ri}">${isTotal?'Σ':ri+1}</td>`;
+    r.forEach((v,ci)=>{ html+=`<td class="${cellClass(ci,v)}" data-r="${ri}" data-c="${ci}">${cellHTML(ci,v)}</td>`; });
+    html+='</tr>';
+  });
+  t.innerHTML=html+'</tbody>';
+  sel={a:null,f:null}; editing=null; undoStack=[];
+  if(!gridBound){ bindGrid(t); gridBound=true; }
+}
+
+function bindGrid(t){
+  t.addEventListener('mousedown', e=>{
+    if(editing){
+      if(editing.cell.contains(e.target)) return;
+      editing.cell.blur();
+    }
+    if(e.target.closest('.cp')) return;
+    const cell=e.target.closest('td.cell'), th=e.target.closest('th[data-c]');
+    const gut=e.target.closest('td.gut'), corner=e.target.closest('th.corner');
+    const N=grid.length-1, M=HEADERS.length-1;
+    if(corner){ setSel({r:0,c:0},{r:N,c:M}); e.preventDefault(); return; }
+    if(th){ const c=+th.dataset.c; setSel({r:0,c},{r:N,c}); e.preventDefault(); return; }
+    if(gut){ const r=+gut.dataset.row; setSel({r,c:0},{r,c:M}); e.preventDefault(); return; }
+    if(cell){
+      const p={r:+cell.dataset.r,c:+cell.dataset.c};
+      if(e.shiftKey && sel.a) setSel(sel.a,p); else { setSel(p,p); dragging=true; }
+      e.preventDefault();
+    }
+  });
+  t.addEventListener('mouseover', e=>{
+    if(!dragging || editing) return;
+    const cell=e.target.closest('td.cell'); if(!cell) return;
+    setSel(sel.a,{r:+cell.dataset.r,c:+cell.dataset.c});
+  });
+  window.addEventListener('mouseup', ()=>{ dragging=false; });
+
+  // 粘贴 Ctrl/⌘+V：单个值 → 填满所有选中格；多格 → 从选区左上角开始贴（选区是整数倍时平铺）
+  document.addEventListener('paste', e=>{
+    if(editing || !sel.a) return;
+    const ae=document.activeElement;
+    if(ae && (ae.tagName==='INPUT' || ae.tagName==='TEXTAREA')) return;
+    const cd=e.clipboardData || window.clipboardData; if(!cd) return;
+    let text=cd.getData('text/plain') || cd.getData('Text');
+    if(text==null || text==='') return;
+    e.preventDefault();
+    text=text.replace(/\r/g,'').replace(/\n$/,'');
+    const block=text.split('\n').map(l=>l.split('\t'));
+    const bh=block.length, bw=Math.max(...block.map(l=>l.length));
+    const b=selBox(), N=grid.length-1, M=HEADERS.length-1;
+    let h=b.r2-b.r1+1, w=b.c2-b.c1+1;
+    if(h%bh!==0 || w%bw!==0){ h=bh; w=bw; }
+    const ch=[];
+    for(let i=0;i<h && b.r1+i<=N;i++)
+      for(let j=0;j<w && b.c1+j<=M;j++)
+        ch.push({r:b.r1+i, c:b.c1+j, v:(block[i%bh][j%bw] ?? '')});
+    pushUndo(applyCells(ch));
+    setSel({r:b.r1,c:b.c1},{r:Math.min(N,b.r1+h-1), c:Math.min(M,b.c1+w-1)});
+    toast(`已粘贴 ${ch.length} 格 · Pasted into ${ch.length} cell${ch.length>1?'s':''}`);
+  });
+
+  t.addEventListener('dblclick', e=>{
+    const cell=e.target.closest('td.cell'); if(!cell || editing) return;
+    e.preventDefault(); startEdit(cell);
+  });
+  t.addEventListener('click', e=>{
+    const b=e.target.closest('[data-copycol]'); if(!b) return;
+    copyText(grid.map(r=>r[+b.dataset.copycol]).join('\n')); toast('已复制此列 Column copied');
+  });
+  document.addEventListener('keydown', e=>{
+    if(editing) return;
+    if(document.activeElement && document.activeElement.tagName==='INPUT') return;
+    if((e.ctrlKey||e.metaKey) && (e.key==='c'||e.key==='C')){
+      if(sel.a){ copySelection(); toast('已复制 Copied'); e.preventDefault(); }
+      return;
+    }
+    // 撤销 Ctrl/⌘+Z
+    if((e.ctrlKey||e.metaKey) && (e.key==='z'||e.key==='Z')){
+      const last=undoStack.pop();
+      if(last){ applyCells(last); toast('已撤销 Undone'); }
+      e.preventDefault(); return;
+    }
+    // Delete / Backspace 清空选中格
+    if((e.key==='Delete'||e.key==='Backspace') && sel.a){
+      const b=selBox(), ch=[];
+      for(let r=b.r1;r<=b.r2;r++) for(let c=b.c1;c<=b.c2;c++) ch.push({r,c,v:''});
+      pushUndo(applyCells(ch)); e.preventDefault(); return;
+    }
+    if(!sel.f) return;
+    let {r,c}=sel.f; const N=grid.length-1, M=HEADERS.length-1;
+    if(e.key==='ArrowRight') c=Math.min(M,c+1);
+    else if(e.key==='ArrowLeft') c=Math.max(0,c-1);
+    else if(e.key==='ArrowDown') r=Math.min(N,r+1);
+    else if(e.key==='ArrowUp') r=Math.max(0,r-1);
+    else if(e.key==='Enter'){ const cell=cellAt(sel.f.r,sel.f.c); if(cell) startEdit(cell); e.preventDefault(); return; }
+    else return;
+    setSel({r,c},{r,c}); e.preventDefault();
+  });
+}
+
+let undoStack=[];
+function pushUndo(prev){ if(prev.length){ undoStack.push(prev); if(undoStack.length>50) undoStack.shift(); } }
+function selBox(){
+  return {r1:Math.min(sel.a.r,sel.f.r), r2:Math.max(sel.a.r,sel.f.r),
+          c1:Math.min(sel.a.c,sel.f.c), c2:Math.max(sel.a.c,sel.f.c)};
+}
+// 写入一批格子并刷新显示，返回旧值（用于撤销）
+function applyCells(changes){
+  const prev=changes.map(x=>({r:x.r, c:x.c, v:grid[x.r][x.c]}));
+  changes.forEach(({r,c,v})=>{
+    grid[r][c]=String(v);
+    const td=cellAt(r,c);
+    if(td){ td.innerHTML=cellHTML(c,grid[r][c]); td.className=cellClass(c,grid[r][c]); }
+  });
+  if(sel.a) setSel(sel.a, sel.f);
+  return prev;
+}
+
+function cellAt(r,c){ return $('grid').querySelector(`td.cell[data-r="${r}"][data-c="${c}"]`); }
+
+function caretToEnd(el){
+  const range=document.createRange();
+  range.selectNodeContents(el); range.collapse(false);
+  const s=window.getSelection(); s.removeAllRanges(); s.addRange(range);
+}
+
+function startEdit(cell){
+  const r=+cell.dataset.r, c=+cell.dataset.c;
+  editing={cell,r,c,old:grid[r][c]};
+  cell.classList.remove('sel');
+  cell.textContent=grid[r][c];
+  cell.contentEditable='true';
+  cell.focus(); caretToEnd(cell);
+  requestAnimationFrame(()=>{ if(editing && editing.cell===cell){ cell.focus(); caretToEnd(cell); } });
+  const finish=(commit)=>{
+    cell.removeEventListener('blur',onBlur); cell.removeEventListener('keydown',onKey);
+    cell.contentEditable='false';
+    if(commit){
+      const nv=cell.textContent.replace(/\n/g,' ');
+      if(nv!==grid[r][c]){ pushUndo([{r,c,v:grid[r][c]}]); grid[r][c]=nv; }
+    }
+    cell.innerHTML=cellHTML(c, grid[r][c]);
+    cell.className=cellClass(c, grid[r][c]);
+    editing=null;
+    window.getSelection().removeAllRanges();
+    setSel({r,c},{r,c});
+  };
+  const onBlur=()=>finish(true);
+  const onKey=ev=>{
+    if(ev.key==='Enter'){ ev.preventDefault(); finish(true); }
+    else if(ev.key==='Escape'){ ev.preventDefault(); finish(false); }
+  };
+  cell.addEventListener('blur',onBlur); cell.addEventListener('keydown',onKey);
+}
+
+function setSel(a,f){
+  sel={a,f};
+  const r1=Math.min(a.r,f.r),r2=Math.max(a.r,f.r),c1=Math.min(a.c,f.c),c2=Math.max(a.c,f.c);
+  $('grid').querySelectorAll('td.cell').forEach(td=>{
+    const r=+td.dataset.r,c=+td.dataset.c;
+    td.classList.toggle('sel', r>=r1&&r<=r2&&c>=c1&&c<=c2);
+    td.classList.toggle('anchor', r===a.r&&c===a.c);
+  });
+}
+
+function copySelection(){
+  const r1=Math.min(sel.a.r,sel.f.r),r2=Math.max(sel.a.r,sel.f.r);
+  const c1=Math.min(sel.a.c,sel.f.c),c2=Math.max(sel.a.c,sel.f.c);
+  const out=[];
+  for(let r=r1;r<=r2;r++){ const line=[]; for(let c=c1;c<=c2;c++) line.push(grid[r][c]); out.push(line.join('\t')); }
+  copyText(out.join('\n'));
+}
+
+$('btnCopyTable').addEventListener('click', ()=>{
+  const out=[HEADERS.map(headerText).join('\t')];
+  grid.forEach(r=>out.push(r.join('\t')));
+  copyText(out.join('\n')); toast('已复制整表 Table copied');
+});
+
+$('btnCsv').addEventListener('click', ()=>{
+  const lines=[HEADERS.map(h=>csvEsc(headerText(h))).join(',')];
+  grid.forEach(r=>lines.push(r.map(csvEsc).join(',')));
+  download(lines.join('\n'), 'dsp_assign_report.csv');
+});
+
+// ===== 工具函数 =====
+function csvEsc(v){ return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function download(text, name){
+  const blob=new Blob(['﻿'+text],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500);
+}
+function copyText(text){
+  const ta=document.createElement('textarea');
+  ta.value=text; ta.style.position='fixed'; ta.style.top='-1000px';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  let ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta);
+  if(!ok && navigator.clipboard) navigator.clipboard.writeText(text).catch(()=>{});
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+</script>
+</body>
+</html>
